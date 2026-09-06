@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Health / connection test probe path
+    match /test/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Isolated user partition
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // Entries collection strictly isolated per authenticated user
+      match /entries/{entryId} {
+        allow read, write, delete: if isOwner(userId);
+      }
+    }
+  }
+}

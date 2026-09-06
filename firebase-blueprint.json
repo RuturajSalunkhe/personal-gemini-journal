@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile metadata isolated to their private account",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Authenticated user identifier" },
+        "createdAt": { "type": "number", "description": "Timestamp of account creation" },
+        "updatedAt": { "type": "number", "description": "Timestamp of last account update" }
+      },
+      "required": ["userId"]
+    },
+    "JournalEntry": {
+      "title": "JournalEntry",
+      "description": "Personal journal entry containing dialogue, cognitive pulse, and mindmap hierarchy",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique entry identifier" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "title": { "type": "string", "description": "Journal title", "maxLength": 200 },
+        "createdAt": { "type": "number", "description": "Creation timestamp in milliseconds" },
+        "updatedAt": { "type": "number", "description": "Last modified timestamp in milliseconds" },
+        "messages": {
+          "type": "array",
+          "description": "List of conversational turns between user and Gemini model"
+        },
+        "cognitivePulse": {
+          "type": "object",
+          "description": "Extracted emotional mood, action items, tags, and concept mindmap"
+        },
+        "isFavorite": { "type": "boolean", "description": "Flag indicating if entry is starred" },
+        "isArchived": { "type": "boolean", "description": "Flag indicating if entry is archived" }
+      },
+      "required": ["id", "userId", "title", "createdAt", "updatedAt", "messages"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Private user profile partition"
+    },
+    "/users/{userId}/entries/{entryId}": {
+      "schema": "JournalEntry",
+      "description": "Individual personal journal entries strictly isolated to the user"
+    }
+  }
+}
