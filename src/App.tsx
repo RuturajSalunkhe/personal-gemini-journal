@@ -40,6 +40,7 @@ export default function App() {
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'offline'>('synced');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [pulseAnalysisError, setPulseAnalysisError] = useState<string | null>(null);
 
   // Theme state
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -305,6 +306,7 @@ What would you like to reflect on or deconstruct today?`,
     if (!current || !user?.uid) return;
 
     setIsAnalyzingPulse(true);
+    setPulseAnalysisError(null);
     try {
       let idToken = '';
       if (auth.currentUser) {
@@ -334,7 +336,8 @@ What would you like to reflect on or deconstruct today?`,
       });
 
       if (!res.ok) {
-        throw new Error(`Analysis server returned ${res.status}`);
+        const errorJson = await res.json().catch(() => ({}));
+        throw new Error(errorJson.error || `Analysis server returned ${res.status}`);
       }
 
       const pulseData: CognitivePulse = await res.json();
@@ -350,8 +353,9 @@ What would you like to reflect on or deconstruct today?`,
           title: pulseData.mindMap.centralConcept
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Cognitive pulse analysis failed:', error);
+      setPulseAnalysisError(error?.message || 'Cognitive analysis is temporarily unavailable. Please try again.');
     } finally {
       setIsAnalyzingPulse(false);
     }
@@ -603,6 +607,7 @@ What would you like to reflect on or deconstruct today?`,
               <CognitivePulsePanel
                 pulse={activeEntry?.cognitivePulse}
                 isAnalyzing={isAnalyzingPulse}
+                errorMessage={pulseAnalysisError}
                 onReanalyze={() => handleAnalyzeCognitivePulse()}
                 onToggleActionItem={handleToggleActionItem}
                 onAddActionItem={handleAddActionItem}
@@ -619,6 +624,7 @@ What would you like to reflect on or deconstruct today?`,
                 <CognitivePulsePanel
                   pulse={activeEntry?.cognitivePulse}
                   isAnalyzing={isAnalyzingPulse}
+                  errorMessage={pulseAnalysisError}
                   onReanalyze={() => handleAnalyzeCognitivePulse()}
                   onToggleActionItem={handleToggleActionItem}
                   onAddActionItem={handleAddActionItem}

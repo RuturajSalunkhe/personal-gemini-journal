@@ -20,6 +20,7 @@ import {
 interface CognitivePulsePanelProps {
   pulse?: CognitivePulse;
   isAnalyzing: boolean;
+  errorMessage?: string | null;
   onReanalyze: () => void;
   onToggleActionItem: (itemId: string, completed: boolean) => void;
   onAddActionItem?: (text: string) => void;
@@ -30,6 +31,7 @@ interface CognitivePulsePanelProps {
 export const CognitivePulsePanel: React.FC<CognitivePulsePanelProps> = ({
   pulse,
   isAnalyzing,
+  errorMessage,
   onReanalyze,
   onToggleActionItem,
   onAddActionItem,
@@ -65,6 +67,11 @@ export const CognitivePulsePanel: React.FC<CognitivePulsePanelProps> = ({
         <p className="text-xs text-stone-500 max-w-sm mb-6 leading-relaxed">
           Gemini extracts your emotional tone, actionable tasks, semantic tags, and a concept mindmap from your journal entries.
         </p>
+        {errorMessage && (
+          <div className="max-w-sm mb-4 p-3 text-xs rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200">
+            {errorMessage}
+          </div>
+        )}
         <button
           id="btn-generate-initial-pulse"
           onClick={onReanalyze}
@@ -79,6 +86,19 @@ export const CognitivePulsePanel: React.FC<CognitivePulsePanelProps> = ({
 
   return (
     <div id="cognitive-pulse-panel" className="h-full overflow-y-auto p-5 space-y-6">
+      {/* Error notice if reanalysis failed */}
+      {errorMessage && (
+        <div className="p-3 text-xs rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200 flex items-center justify-between gap-2">
+          <span>{errorMessage}</span>
+          <button
+            onClick={onReanalyze}
+            className="px-2.5 py-1 bg-amber-500 text-white rounded font-medium hover:bg-amber-600 transition text-[11px] shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Top Header & Re-analyze trigger */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

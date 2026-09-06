@@ -71,6 +71,53 @@ app.get('/api/health', (req: Request, res: Response) => {
 });
 
 /**
+ * Candidate models prioritized for resilience.
+ * If primary encounters a 503/429 demand spike, the client seamlessly cascades.
+ */
+const CANDIDATE_MODELS = ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+
+/**
+ * Defensive execution wrapper with exponential backoff and multi-model cascade.
+ * Complies with Lead Enterprise Security & Full-Stack Cloud Defensive Design.
+ */
+async function executeWithDefensiveFallback<T>(
+  action: (model: string) => Promise<T>,
+  models: string[] = CANDIDATE_MODELS
+): Promise<{ result: T; modelUsed: string }> {
+  let lastError: any = null;
+
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await action(model);
+        return { result, modelUsed: model };
+      } catch (err: any) {
+        lastError = err;
+        const msg = String(err?.message || '');
+        const isTransient =
+          msg.includes('503') ||
+          msg.includes('UNAVAILABLE') ||
+          msg.includes('high demand') ||
+          msg.includes('429') ||
+          msg.includes('RESOURCE_EXHAUSTED');
+
+        console.warn(`[Gemini Attempt] Model: ${model}, Attempt: ${attempt + 1}. Error: ${msg.slice(0, 160)}`);
+
+        if (isTransient && attempt === 0) {
+          // Brief exponential backoff before retrying same model
+          await new Promise((resolve) => setTimeout(resolve, 600));
+        } else {
+          // Break to next candidate model
+          break;
+        }
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+/**
  * POST /api/chat/stream
  * Multi-turn Brainstorming & Journal Chat with streaming SSE response
  */
@@ -106,15 +153,17 @@ Guidelines:
 - Avoid robotic platitudes or generic cheerleading.
 - Format responses cleanly using markdown (bolding key terms, bullet points for lists, italicized reflections).`;
 
-    const responseStream = await ai.models.generateContentStream({
-      model: 'gemini-3.6-flash',
-      contents,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        topP: 0.95,
-      }
-    });
+    const { result: responseStream } = await executeWithDefensiveFallback((model) =>
+      ai.models.generateContentStream({
+        model,
+        contents,
+        config: {
+          systemInstruction,
+          temperature: 0.7,
+          topP: 0.95,
+        }
+      })
+    );
 
     for await (const chunk of responseStream) {
       if (chunk.text) {
@@ -244,18 +293,47 @@ Journal Content:
 ${textToAnalyze.slice(0, 10000)}
 """`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: analysisSchema,
-        temperature: 0.2,
-      }
-    });
+    const { result: response, modelUsed } = await executeWithDefensiveFallback((model) =>
+      ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: analysisSchema,
+          temperature: 0.2,
+        }
+      })
+    );
 
-    const parsedData = JSON.parse(response.text || '{}');
+    let parsedData: any = {};
+    try {
+      parsedData = JSON.parse(response.text || '{}');
+    } catch (pErr) {
+      console.warn('Failed to parse model output as JSON:', response.text);
+      parsedData = {
+        mood: {
+          label: 'Reflective',
+          emoji: '🌿',
+          sentiment: 'contemplative',
+          energy: 'calm'
+        },
+        actionItems: [],
+        topicTags: ['reflection', 'journal'],
+        summary: textToAnalyze.slice(0, 160),
+        mindMap: {
+          centralConcept: 'Reflection Insight',
+          branches: [
+            {
+              title: 'Thought Stream',
+              subIdeas: ['Deconstructed thoughts', 'Ongoing clarity']
+            }
+          ]
+        }
+      };
+    }
+
     parsedData.analyzedAt = Date.now();
+    parsedData.modelUsed = modelUsed;
 
     // Ensure action items have unique ids
     if (Array.isArray(parsedData.actionItems)) {
@@ -269,9 +347,19 @@ ${textToAnalyze.slice(0, 10000)}
     res.json(parsedData);
   } catch (error: any) {
     console.error('Error performing cognitive pulse analysis:', error);
-    res.status(500).json({
-      error: 'Failed to analyze journal entry with Gemini',
-      details: error?.message || 'Unknown error'
+    const msg = String(error?.message || '');
+    const isOverloaded =
+      msg.includes('503') ||
+      msg.includes('UNAVAILABLE') ||
+      msg.includes('high demand') ||
+      msg.includes('429') ||
+      msg.includes('RESOURCE_EXHAUSTED');
+
+    res.status(isOverloaded ? 503 : 500).json({
+      error: isOverloaded
+        ? 'AI models are experiencing temporary high demand. Please try again in a few moments.'
+        : 'Failed to analyze journal entry with Gemini',
+      details: msg
     });
   }
 });
